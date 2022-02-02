@@ -4,7 +4,7 @@ use num_bigint::{BigUint, RandomBits};
 
 #[derive(Debug)]
 pub struct PrivateKey {
-    key_options: Vec<(BigUint, BigUint)>,
+    pub key_options: Vec<(BigUint, BigUint)>,
 }
 
 impl PrivateKey {
@@ -12,14 +12,14 @@ impl PrivateKey {
         let mut rng = thread_rng();
         
         PrivateKey {
-            key_options: vec![(rng.sample(RandomBits::new(256)), 
-                               rng.sample(RandomBits::new(256))); 256],
+            key_options: (0..256).map(|_| (rng.sample(RandomBits::new(256)),
+                                           rng.sample(RandomBits::new(256)))).collect(),
         }
     }
 }
 
 pub struct PublicKey {
-    key_options: Vec<(BigUint, BigUint)>,
+    pub key_options: Vec<(BigUint, BigUint)>,
 }
 
 impl PublicKey {
@@ -39,9 +39,14 @@ impl PublicKey {
     }
 }
 
+pub struct Signature {
+    pub msg_hash: BigUint,
+    pub sig: Vec<BigUint>,
+}
+
 pub struct KeyPair {
-    private: PrivateKey,
-    public: PublicKey,
+    pub private: PrivateKey,
+    pub public: PublicKey,
 }
 
 impl KeyPair {
@@ -50,5 +55,22 @@ impl KeyPair {
         let public = PublicKey::generate(&private);
 
         KeyPair {public, private}
+    }
+
+    pub fn sign(&self, msg: &str) -> Signature {
+        let mut hasher = Sha256::new();
+        hasher.update(msg);
+        let msg_hash = BigUint::from_bytes_be(&hasher.finalize());
+        
+        let mut sig = Vec::with_capacity(256); 
+        for i in 0..256 {
+            if msg_hash.bit(i as u64) {
+                sig.push(self.private.key_options[i].1.clone());
+            } else {
+                sig.push(self.private.key_options[i].0.clone());
+            }
+        }
+
+        Signature {msg_hash, sig}
     }
 }
