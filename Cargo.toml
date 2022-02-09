@@ -9,3 +9,4 @@ edition = "2021"
 rand = "0.8"
 num-bigint = {version = "0.4", features = ["rand"]}
 sha2 = "0.10"
+digest = "0.10"
