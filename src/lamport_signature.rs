@@ -27,7 +27,7 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
-    pub fn generate(private: &PrivateKey, hasher: &'static dyn DynDigest) -> Self {
+    pub fn generate(private: &PrivateKey, hasher: &mut dyn DynDigest) -> Self {
         let mut key_options = Vec::with_capacity(256);
 
         for val in &private.key_options {
@@ -45,18 +45,18 @@ impl PublicKey {
 pub struct KeyPair {
     pub private: PrivateKey,
     pub public: PublicKey,
-    pub hasher: &'static dyn DynDigest, 
+    pub hasher: Box<dyn DynDigest>, 
 }
 
 impl KeyPair {
-    pub fn generate(hasher: &'static dyn DynDigest) -> Self {
+    pub fn generate(mut hasher: Box<dyn DynDigest>) -> Self {
         let private = PrivateKey::generate();
-        let public = PublicKey::generate(&private, hasher);
+        let public = PublicKey::generate(&private, &mut *hasher);
 
         KeyPair {public, private, hasher}
     }
     
-    pub fn sign(self, msg: &mut dyn io::Read) -> Result<Signature, Box<dyn Error>> {
+    pub fn sign(mut self, msg: &mut dyn io::Read) -> Result<Signature, Box<dyn Error>> {
         let mut buffer = Vec::new();
         io::copy(msg, &mut buffer)?;
         self.hasher.update(&buffer);
@@ -78,7 +78,7 @@ impl KeyPair {
         })
     }
 
-    pub fn sign_string(self, msg: &str) -> Signature {
+    pub fn sign_string(mut self, msg: &str) -> Signature {
         self.hasher.update(msg.as_bytes());
         let msg_hash = BigUint::from_bytes_be(&self.hasher.finalize_reset());
         
@@ -102,11 +102,11 @@ impl KeyPair {
 pub struct Signature {
     pub pub_key: PublicKey,
     pub sig: Vec<BigUint>,
-    pub hasher: &'static dyn DynDigest,
+    pub hasher: Box<dyn DynDigest>,
 }
 
 impl Signature {
-    pub fn verify(&self, msg: &mut dyn io::Read) -> Result<bool, Box<dyn Error>> {
+    pub fn verify(&mut self, msg: &mut dyn io::Read) -> Result<bool, Box<dyn Error>> {
         let mut buffer = Vec::new();
         io::copy(msg, &mut buffer)?;
         self.hasher.update(&buffer);
@@ -115,14 +115,14 @@ impl Signature {
         Ok(self.check_against_hash(&msg_hash))
     }
 
-    pub fn verify_string(&self, msg: &str) -> bool {
+    pub fn verify_string(&mut self, msg: &str) -> bool {
         self.hasher.update(msg.as_bytes());
         let msg_hash = BigUint::from_bytes_be(&self.hasher.finalize_reset());
         
         self.check_against_hash(&msg_hash)
     }
     
-    fn check_against_hash(&self, msg_hash: &BigUint) -> bool {
+    fn check_against_hash(&mut self, msg_hash: &BigUint) -> bool {
         for (i, (pub0, pub1)) in self.pub_key.key_options.iter().enumerate() {
             self.hasher.update(&self.sig[i].to_bytes_be());
             let sig_hash = BigUint::from_bytes_be(&self.hasher.finalize_reset());
