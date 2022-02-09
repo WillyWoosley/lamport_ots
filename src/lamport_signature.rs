@@ -11,12 +11,14 @@ pub struct PrivateKey {
 }
 
 impl PrivateKey {
-    pub fn generate() -> Self {
+    pub fn generate(digest_size: usize) -> Self {
         let mut rng = thread_rng();
         
         PrivateKey {
-            key_options: (0..256).map(|_| (rng.sample(RandomBits::new(256)),
-                                           rng.sample(RandomBits::new(256)))).collect(),
+            key_options: (0..digest_size)
+                             .map(|_| (rng.sample(RandomBits::new(digest_size as u64)),
+                                       rng.sample(RandomBits::new(digest_size as u64))))
+                             .collect(),
         }
     }
 }
@@ -28,7 +30,7 @@ pub struct PublicKey {
 
 impl PublicKey {
     pub fn generate(private: &PrivateKey, hasher: &mut dyn DynDigest) -> Self {
-        let mut key_options = Vec::with_capacity(256);
+        let mut key_options = Vec::with_capacity(hasher.output_size());
 
         for val in &private.key_options {
             hasher.update(&val.0.to_bytes_be());
@@ -50,7 +52,7 @@ pub struct KeyPair {
 
 impl KeyPair {
     pub fn generate(mut hasher: Box<dyn DynDigest>) -> Self {
-        let private = PrivateKey::generate();
+        let private = PrivateKey::generate(hasher.output_size());
         let public = PublicKey::generate(&private, &mut *hasher);
 
         KeyPair {public, private, hasher}
@@ -62,7 +64,7 @@ impl KeyPair {
         self.hasher.update(&buffer);
         let msg_hash = BigUint::from_bytes_be(&self.hasher.finalize_reset());
 
-        let mut sig = Vec::with_capacity(256); 
+        let mut sig = Vec::with_capacity(self.hasher.output_size()); 
         for (i, (priv0, priv1)) in self.private.key_options.into_iter().enumerate() {
             if msg_hash.bit(i as u64) {
                 sig.push(priv1);
@@ -82,7 +84,7 @@ impl KeyPair {
         self.hasher.update(msg.as_bytes());
         let msg_hash = BigUint::from_bytes_be(&self.hasher.finalize_reset());
         
-        let mut sig = Vec::with_capacity(256); 
+        let mut sig = Vec::with_capacity(self.hasher.output_size()); 
         for (i, (priv0, priv1)) in self.private.key_options.into_iter().enumerate() {
             if msg_hash.bit(i as u64) {
                 sig.push(priv1);
