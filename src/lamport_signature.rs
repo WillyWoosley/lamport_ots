@@ -31,7 +31,7 @@ pub struct PublicKey {
 
 impl PublicKey {
     pub fn generate(private: &PrivateKey, hasher: &mut dyn DynDigest) -> Self {
-        let mut key_options = Vec::with_capacity(hasher.output_size());
+        let mut key_options = Vec::with_capacity(hasher.output_size() * 8);
 
         for val in &private.key_options {
             hasher.update(&val.0.to_bytes_be());
@@ -53,7 +53,7 @@ pub struct KeyPair {
 
 impl KeyPair {
     pub fn generate(mut hasher: Box<dyn DynDigest>) -> Self {
-        let private = PrivateKey::generate(hasher.output_size());
+        let private = PrivateKey::generate(hasher.output_size() * 8);
         let public = PublicKey::generate(&private, &mut *hasher);
         
         KeyPair {public, private, hasher: RefCell::new(hasher)}
@@ -66,7 +66,7 @@ impl KeyPair {
         hasher.update(&buffer);
         let msg_hash = BigUint::from_bytes_be(&hasher.finalize_reset());
 
-        let mut sig = Vec::with_capacity(hasher.output_size()); 
+        let mut sig = Vec::with_capacity(hasher.output_size() * 8); 
         for (i, (priv0, priv1)) in self.private.key_options.into_iter().enumerate() {
             if msg_hash.bit(i as u64) {
                 sig.push(priv1);
@@ -89,7 +89,7 @@ impl KeyPair {
         hasher.update(msg.as_bytes());
         let msg_hash = BigUint::from_bytes_be(&hasher.finalize_reset());
         
-        let mut sig = Vec::with_capacity(hasher.output_size()); 
+        let mut sig = Vec::with_capacity(hasher.output_size() * 8); 
         for (i, (priv0, priv1)) in self.private.key_options.into_iter().enumerate() {
             if msg_hash.bit(i as u64) {
                 sig.push(priv1);
