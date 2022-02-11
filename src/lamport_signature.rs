@@ -1,6 +1,6 @@
 use digest::DynDigest;
 use rand::{thread_rng, Rng};
-use num_bigint::{BigUint, RandomBits};
+use num_bigint::BigUint;
 
 use std::error::Error;
 use std::io;
@@ -8,25 +8,27 @@ use std::cell::RefCell;
 
 #[derive(Debug)]
 pub struct PrivateKey {
-    pub key_options: Vec<(BigUint, BigUint)>,
+    pub key_options: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
 impl PrivateKey {
-    pub fn generate(digest_size: usize) -> Self {
+    pub fn generate(digest_bytes: usize) -> Self {
         let mut rng = thread_rng();
+        let mut key_options = Vec::with_capacity(digest_bytes * 8);
         
-        PrivateKey {
-            key_options: (0..digest_size)
-                             .map(|_| (rng.sample(RandomBits::new(digest_size as u64)),
-                                       rng.sample(RandomBits::new(digest_size as u64))))
-                             .collect(),
+        for _ in 0..(digest_bytes * 8) {
+            let key0 = (0..digest_bytes).map(|_| rng.gen()).collect();
+            let key1 = (0..digest_bytes).map(|_| rng.gen()).collect();
+            key_options.push((key0, key1));
         }
+
+        PrivateKey {key_options}
     }
 }
 
 #[derive(Debug)]
 pub struct PublicKey {
-    pub key_options: Vec<(BigUint, BigUint)>,
+    pub key_options: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
 impl PublicKey {
@@ -34,10 +36,10 @@ impl PublicKey {
         let mut key_options = Vec::with_capacity(hasher.output_size() * 8);
 
         for val in &private.key_options {
-            hasher.update(&val.0.to_bytes_be());
-            let hash0 = BigUint::from_bytes_be(&hasher.finalize_reset());
-            hasher.update(&val.1.to_bytes_be());
-            let hash1 = BigUint::from_bytes_be(&hasher.finalize_reset());
+            hasher.update(&val.0);
+            let hash0 = hasher.finalize_reset().into_vec();
+            hasher.update(&val.1);
+            let hash1 = hasher.finalize_reset().into_vec();
             key_options.push((hash0, hash1));
         }
 
@@ -53,7 +55,7 @@ pub struct KeyPair {
 
 impl KeyPair {
     pub fn generate(mut hasher: Box<dyn DynDigest>) -> Self {
-        let private = PrivateKey::generate(hasher.output_size() * 8);
+        let private = PrivateKey::generate(hasher.output_size());
         let public = PublicKey::generate(&private, &mut *hasher);
         
         KeyPair {public, private, hasher: RefCell::new(hasher)}
@@ -61,8 +63,9 @@ impl KeyPair {
     
     pub fn sign(self, msg: &mut dyn io::Read) -> Result<Signature, Box<dyn Error>> {
         let mut buffer = Vec::new();
-        let mut hasher = self.hasher.borrow_mut();
         io::copy(msg, &mut buffer)?;
+        
+        let mut hasher = self.hasher.borrow_mut();
         hasher.update(&buffer);
         let msg_hash = BigUint::from_bytes_be(&hasher.finalize_reset());
 
@@ -110,15 +113,16 @@ impl KeyPair {
 
 pub struct Signature {
     pub pub_key: PublicKey,
-    pub sig: Vec<BigUint>,
+    pub sig: Vec<Vec<u8>>,
     pub hasher: RefCell<Box<dyn DynDigest>>,
 }
 
 impl Signature {
     pub fn verify(&self, msg: &mut dyn io::Read) -> Result<bool, Box<dyn Error>> {
         let mut buffer = Vec::new();
-        let mut hasher = self.hasher.borrow_mut();
         io::copy(msg, &mut buffer)?;
+        
+        let mut hasher = self.hasher.borrow_mut();
         hasher.update(&buffer);
         let msg_hash = BigUint::from_bytes_be(&hasher.finalize_reset());
         
@@ -141,8 +145,8 @@ impl Signature {
         let mut hasher = self.hasher.borrow_mut();
 
         for (i, (pub0, pub1)) in self.pub_key.key_options.iter().enumerate() {
-            hasher.update(&self.sig[i].to_bytes_be());
-            let sig_hash = BigUint::from_bytes_be(&hasher.finalize_reset());
+            hasher.update(&self.sig[i]);
+            let sig_hash = hasher.finalize_reset().into_vec();
 
             if msg_hash.bit(i as u64) {
                 if &sig_hash != pub1 {
