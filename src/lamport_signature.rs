@@ -1,6 +1,5 @@
 use digest::DynDigest;
 use rand::{thread_rng, Rng};
-use num_bigint::BigUint;
 
 use std::error::Error;
 use std::io;
@@ -67,11 +66,15 @@ impl KeyPair {
         
         let mut hasher = self.hasher.borrow_mut();
         hasher.update(&buffer);
-        let msg_hash = BigUint::from_bytes_be(&hasher.finalize_reset());
+        let msg_hash = hasher.finalize_reset().into_vec();
 
         let mut sig = Vec::with_capacity(hasher.output_size() * 8); 
         for (i, (priv0, priv1)) in self.private.key_options.into_iter().enumerate() {
-            if msg_hash.bit(i as u64) {
+            
+            let msg_index = i / 8;
+            let bit_index = 7 - (i % 8);
+            
+            if msg_hash[msg_index] & (1 << bit_index) != 0 {
                 sig.push(priv1);
             } else {
                 sig.push(priv0);
@@ -90,15 +93,18 @@ impl KeyPair {
     pub fn sign_string(self, msg: &str) -> Signature {
         let mut hasher = self.hasher.borrow_mut();
         hasher.update(msg.as_bytes());
-        let msg_hash = BigUint::from_bytes_be(&hasher.finalize_reset());
+        let msg_hash = hasher.finalize_reset().into_vec();
         
         let mut sig = Vec::with_capacity(hasher.output_size() * 8); 
         for (i, (priv0, priv1)) in self.private.key_options.into_iter().enumerate() {
-            if msg_hash.bit(i as u64) {
+            let msg_index = i / 8;
+            let bit_index = 7 - (i % 8);
+            
+            if msg_hash[msg_index] & (1 << bit_index) != 0 {
                 sig.push(priv1);
             } else {
                 sig.push(priv0);
-            }
+            }           
         }
         
         drop(hasher);
@@ -124,7 +130,7 @@ impl Signature {
         
         let mut hasher = self.hasher.borrow_mut();
         hasher.update(&buffer);
-        let msg_hash = BigUint::from_bytes_be(&hasher.finalize_reset());
+        let msg_hash = hasher.finalize_reset().into_vec();
         
         drop(hasher);
         
@@ -134,21 +140,24 @@ impl Signature {
     pub fn verify_string(&self, msg: &str) -> bool {
         let mut hasher = self.hasher.borrow_mut();
         hasher.update(msg.as_bytes());
-        let msg_hash = BigUint::from_bytes_be(&hasher.finalize_reset());
+        let msg_hash = hasher.finalize_reset().into_vec();
         
         drop(hasher);
         
         self.check_against_hash(&msg_hash)
     }
     
-    fn check_against_hash(&self, msg_hash: &BigUint) -> bool {
+    fn check_against_hash(&self, msg_hash: &Vec<u8>) -> bool {
         let mut hasher = self.hasher.borrow_mut();
-
+        
         for (i, (pub0, pub1)) in self.pub_key.key_options.iter().enumerate() {
             hasher.update(&self.sig[i]);
             let sig_hash = hasher.finalize_reset().into_vec();
+            
+            let msg_index = i / 8;
+            let bit_index = 7 - (i % 8);
 
-            if msg_hash.bit(i as u64) {
+            if msg_hash[msg_index] & (1 << bit_index) != 0 {
                 if &sig_hash != pub1 {
                     return false;
                 }
