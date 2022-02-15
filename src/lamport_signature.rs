@@ -1,8 +1,6 @@
 use digest::DynDigest;
 use rand::{thread_rng, Rng};
 
-use std::error::Error;
-use std::io;
 use std::cell::RefCell;
 
 #[derive(Debug)]
@@ -34,6 +32,8 @@ impl PublicKey {
     pub fn generate(private: &PrivateKey, hasher: &mut dyn DynDigest) -> Self {
         let mut key_options = Vec::with_capacity(hasher.output_size() * 8);
 
+        hasher.finalize_reset(); // in case hasher instance passed is not fresh
+
         for val in &private.key_options {
             hasher.update(&val.0);
             let hash0 = hasher.finalize_reset().into_vec();
@@ -60,12 +60,9 @@ impl KeyPair {
         KeyPair {public, private, hasher: RefCell::new(hasher)}
     }
     
-    pub fn sign(self, msg: &mut dyn io::Read) -> Result<Signature, Box<dyn Error>> {
-        let mut buffer = Vec::new();
-        io::copy(msg, &mut buffer)?;
-        
+    pub fn sign(self, msg: &[u8]) -> Signature {
         let mut hasher = self.hasher.borrow_mut();
-        hasher.update(&buffer);
+        hasher.update(msg);
         let msg_hash = hasher.finalize_reset().into_vec();
 
         let mut sig = Vec::with_capacity(hasher.output_size() * 8); 
@@ -79,32 +76,6 @@ impl KeyPair {
             } else {
                 sig.push(priv0);
             }
-        }
-        
-        drop(hasher);
-
-        Ok(Signature {
-            pub_key: self.public,
-            hasher: self.hasher,
-            sig,
-        })
-    }
-
-    pub fn sign_string(self, msg: &str) -> Signature {
-        let mut hasher = self.hasher.borrow_mut();
-        hasher.update(msg.as_bytes());
-        let msg_hash = hasher.finalize_reset().into_vec();
-        
-        let mut sig = Vec::with_capacity(hasher.output_size() * 8); 
-        for (i, (priv0, priv1)) in self.private.key_options.into_iter().enumerate() {
-            let msg_index = i / 8;
-            let bit_index = 7 - (i % 8);
-            
-            if msg_hash[msg_index] & (1 << bit_index) != 0 {
-                sig.push(priv1);
-            } else {
-                sig.push(priv0);
-            }           
         }
         
         drop(hasher);
@@ -124,32 +95,11 @@ pub struct Signature {
 }
 
 impl Signature {
-    pub fn verify(&self, msg: &mut dyn io::Read) -> Result<bool, Box<dyn Error>> {
-        let mut buffer = Vec::new();
-        io::copy(msg, &mut buffer)?;
-        
+    pub fn verify(&self, msg: &[u8]) -> bool {
         let mut hasher = self.hasher.borrow_mut();
-        hasher.update(&buffer);
+        hasher.update(msg);
         let msg_hash = hasher.finalize_reset().into_vec();
-        
-        drop(hasher);
-        
-        Ok(self.check_against_hash(&msg_hash))
-    }
-
-    pub fn verify_string(&self, msg: &str) -> bool {
-        let mut hasher = self.hasher.borrow_mut();
-        hasher.update(msg.as_bytes());
-        let msg_hash = hasher.finalize_reset().into_vec();
-        
-        drop(hasher);
-        
-        self.check_against_hash(&msg_hash)
-    }
     
-    fn check_against_hash(&self, msg_hash: &Vec<u8>) -> bool {
-        let mut hasher = self.hasher.borrow_mut();
-        
         for (i, (pub0, pub1)) in self.pub_key.key_options.iter().enumerate() {
             hasher.update(&self.sig[i]);
             let sig_hash = hasher.finalize_reset().into_vec();
@@ -168,6 +118,7 @@ impl Signature {
             }
         }
 
-        true
+        true       
     }
 }
+
