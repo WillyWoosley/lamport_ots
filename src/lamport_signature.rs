@@ -1,4 +1,4 @@
-use digest::DynDigest;
+use digest::{Digest, DynDigest};
 use rand::{thread_rng, Rng};
 
 use std::cell::RefCell;
@@ -29,43 +29,38 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
-    pub fn generate(private: &PrivateKey, hasher: &mut dyn DynDigest) -> Self {
-        let mut key_options = Vec::with_capacity(hasher.output_size() * 8);
-
-        hasher.finalize_reset(); // in case hasher instance passed is not fresh
+    pub fn generate<T: Digest>(private: &PrivateKey, hasher: &mut T) -> Self {
+        let mut key_options = Vec::with_capacity(T::output_size() * 8);
 
         for val in &private.key_options {
-            hasher.update(&val.0);
-            let hash0 = hasher.finalize_reset().into_vec();
-            hasher.update(&val.1);
-            let hash1 = hasher.finalize_reset().into_vec();
+            let hash0 = T::digest(&val.0).to_vec();
+            let hash1 = T::digest(&val.1).to_vec();
             key_options.push((hash0, hash1));
-        }
+       }
 
         PublicKey {key_options}
     }
 }
 
-pub struct KeyPair {
+pub struct KeyPair<T: Digest> {
     pub private: PrivateKey,
     pub public: PublicKey,
-    pub hasher: RefCell<Box<dyn DynDigest>>, 
+    pub hasher: T, 
 }
 
-impl KeyPair {
-    pub fn generate(mut hasher: Box<dyn DynDigest>) -> Self {
-        let private = PrivateKey::generate(hasher.output_size());
-        let public = PublicKey::generate(&private, &mut *hasher);
-        
-        KeyPair {public, private, hasher: RefCell::new(hasher)}
+impl<T: Digest> KeyPair<T> {
+    pub fn generate() -> Self {
+        let mut hasher = T::new();
+        let private = PrivateKey::generate(T::output_size());
+        let public = PublicKey::generate(&private, &mut hasher);
+
+        KeyPair {public, private, hasher}
     }
     
-    pub fn sign(self, msg: &[u8]) -> Signature {
-        let mut hasher = self.hasher.borrow_mut();
-        hasher.update(msg);
-        let msg_hash = hasher.finalize_reset().into_vec();
+    pub fn sign(self, msg: &[u8]) -> Signature<T> {
+        let msg_hash = T::digest(msg).to_vec();
 
-        let mut sig = Vec::with_capacity(hasher.output_size() * 8); 
+        let mut sig = Vec::with_capacity(T::output_size() * 8); 
         for (i, (priv0, priv1)) in self.private.key_options.into_iter().enumerate() {
             
             let msg_index = i / 8;
@@ -77,8 +72,6 @@ impl KeyPair {
                 sig.push(priv0);
             }
         }
-        
-        drop(hasher);
 
         Signature {
             pub_key: self.public,
@@ -88,22 +81,19 @@ impl KeyPair {
     }
 }
 
-pub struct Signature {
+pub struct Signature<T: Digest> {
     pub pub_key: PublicKey,
     pub sig: Vec<Vec<u8>>,
-    pub hasher: RefCell<Box<dyn DynDigest>>,
+    pub hasher: T,
 }
 
-impl Signature {
+impl<T:Digest> Signature<T> {
     pub fn verify(&self, msg: &[u8]) -> bool {
-        let mut hasher = self.hasher.borrow_mut();
-        hasher.update(msg);
-        let msg_hash = hasher.finalize_reset().into_vec();
-    
+        let msg_hash = T::digest(msg).to_vec();
+
         for (i, (pub0, pub1)) in self.pub_key.key_options.iter().enumerate() {
-            hasher.update(&self.sig[i]);
-            let sig_hash = hasher.finalize_reset().into_vec();
-            
+            let sig_hash = T::digest(&self.sig[i]).to_vec();
+
             let msg_index = i / 8;
             let bit_index = 7 - (i % 8);
 
