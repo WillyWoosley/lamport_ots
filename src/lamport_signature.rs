@@ -1,7 +1,7 @@
-use digest::{Digest, DynDigest};
+use digest::Digest;
 use rand::{thread_rng, Rng};
 
-use std::cell::RefCell;
+use std::marker::PhantomData;
 
 #[derive(Debug)]
 pub struct PrivateKey {
@@ -29,7 +29,7 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
-    pub fn generate<T: Digest>(private: &PrivateKey, hasher: &mut T) -> Self {
+    pub fn generate<T: Digest>(private: &PrivateKey) -> Self {
         let mut key_options = Vec::with_capacity(T::output_size() * 8);
 
         for val in &private.key_options {
@@ -45,16 +45,19 @@ impl PublicKey {
 pub struct KeyPair<T: Digest> {
     pub private: PrivateKey,
     pub public: PublicKey,
-    pub hasher: T, 
+    hasher: PhantomData<T>, 
 }
 
 impl<T: Digest> KeyPair<T> {
     pub fn generate() -> Self {
-        let mut hasher = T::new();
         let private = PrivateKey::generate(T::output_size());
-        let public = PublicKey::generate(&private, &mut hasher);
+        let public = PublicKey::generate::<T>(&private);
 
-        KeyPair {public, private, hasher}
+        KeyPair {
+            hasher: PhantomData,
+            private,
+            public,
+        }
     }
     
     pub fn sign(self, msg: &[u8]) -> Signature<T> {
@@ -84,7 +87,7 @@ impl<T: Digest> KeyPair<T> {
 pub struct Signature<T: Digest> {
     pub pub_key: PublicKey,
     pub sig: Vec<Vec<u8>>,
-    pub hasher: T,
+    hasher: PhantomData<T>,
 }
 
 impl<T:Digest> Signature<T> {
