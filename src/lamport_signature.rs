@@ -5,7 +5,7 @@ use rand::{thread_rng, Rng};
 
 use std::marker::PhantomData;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PrivateKey {
     pub key_options: Vec<(Vec<u8>, Vec<u8>)>,
 }
@@ -25,7 +25,7 @@ impl PrivateKey {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PublicKey {
     pub key_options: Vec<(Vec<u8>, Vec<u8>)>,
 }
@@ -114,6 +114,95 @@ impl<T:Digest> Signature<T> {
         }
 
         true       
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sha2::{Sha256, Sha512};
+    use super::{PrivateKey, PublicKey, KeyPair, Signature};
+    
+    #[test]
+    fn keypair_length_and_contents_sha256() {
+        let keypair = KeyPair::<Sha256>::generate();
+        assert_eq!(keypair.private.key_options.len(), 256);
+        assert_eq!(keypair.public.key_options.len(), 256);
+        
+        for (k0, k1) in keypair.private.key_options {
+            assert_eq!(k0.len(), 32);
+            assert_eq!(k1.len(), 32);
+        }
+
+        for (k0, k1) in keypair.public.key_options {
+            assert_eq!(k0.len(), 32);
+            assert_eq!(k1.len(), 32);
+        }
+    }
+
+    #[test]
+    fn keypair_length_and_contents_sha512() {
+        let keypair = KeyPair::<Sha512>::generate();
+        assert_eq!(keypair.private.key_options.len(), 512);
+        assert_eq!(keypair.public.key_options.len(), 512);
+        
+        for (k0, k1) in keypair.private.key_options {
+            assert_eq!(k0.len(), 64);
+            assert_eq!(k1.len(), 64);
+        }
+
+        for (k0, k1) in keypair.public.key_options {
+            assert_eq!(k0.len(), 64);
+            assert_eq!(k1.len(), 64);
+        }
+    }
+
+    #[test]
+    fn different_generates_different_keypairs() {
+        let pair1 = KeyPair::<Sha256>::generate();
+        let pair2 = KeyPair::<Sha256>::generate();
+
+        assert_ne!(pair1.private, pair2.private);
+        assert_ne!(pair1.public, pair2.public);
+    }
+
+    #[test]
+    fn signature_length_and_contents_sha256() {
+        let keypair = KeyPair::<Sha256>::generate();
+        let signature = keypair.sign(b"Hello world!");
+
+        assert_eq!(signature.sig.len(), 256);
+        
+        for key in signature.sig {
+            assert_eq!(key.len(), 32);
+        }
+    }
+
+    #[test]
+    fn signature_length_and_contents_sha512() {
+        let keypair = KeyPair::<Sha512>::generate();
+        let signature = keypair.sign(b"Hello world!");
+
+        assert_eq!(signature.sig.len(), 512);
+        
+        for key in signature.sig {
+            assert_eq!(key.len(), 64);
+        }
+    }
+
+    #[test]
+    fn correct_signature_verifies_correct_data() {
+        let keypair = KeyPair::<Sha256>::generate();
+        let signature = keypair.sign(b"Hello world!");
+
+        assert!(signature.verify(b"Hello world!"));
+    }
+
+    #[test]
+    fn correct_signature_fails_incorrect_data() {
+        let keypair = KeyPair::<Sha256>::generate();
+        let signature = keypair.sign(b"Hello world!");
+
+        assert!(!signature.verify(b"Hello moon!"));
     }
 }
 
