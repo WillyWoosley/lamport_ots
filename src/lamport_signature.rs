@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use digest::Digest;
 use rand::{thread_rng, Rng};
 
@@ -30,7 +32,7 @@ pub struct PublicKey {
 
 impl PublicKey {
     pub fn generate<T: Digest>(private: &PrivateKey) -> Self {
-        let mut key_options = Vec::with_capacity(T::output_size() * 8);
+        let mut key_options = Vec::with_capacity(<T as Digest>::output_size() * 8);
 
         for val in &private.key_options {
             let hash0 = T::digest(&val.0).to_vec();
@@ -50,7 +52,7 @@ pub struct KeyPair<T: Digest> {
 
 impl<T: Digest> KeyPair<T> {
     pub fn generate() -> Self {
-        let private = PrivateKey::generate(T::output_size());
+        let private = PrivateKey::generate(<T as Digest>::output_size());
         let public = PublicKey::generate::<T>(&private);
 
         KeyPair {
@@ -63,7 +65,7 @@ impl<T: Digest> KeyPair<T> {
     pub fn sign(self, msg: &[u8]) -> Signature<T> {
         let msg_hash = T::digest(msg).to_vec();
 
-        let mut sig = Vec::with_capacity(T::output_size() * 8); 
+        let mut sig = Vec::with_capacity(<T as Digest>::output_size() * 8); 
         for (i, (priv0, priv1)) in self.private.key_options.into_iter().enumerate() {
             
             let msg_index = i / 8;
