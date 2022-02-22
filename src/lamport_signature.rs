@@ -5,7 +5,7 @@ use rand::{thread_rng, Rng};
 
 use std::marker::PhantomData;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PrivateKey {
     pub key_options: Vec<(Vec<u8>, Vec<u8>)>,
 }
@@ -25,7 +25,20 @@ impl PrivateKey {
     }
 }
 
-#[derive(Debug, PartialEq)]
+impl Drop for PrivateKey {
+    fn drop(&mut self) {
+        for (priv0, priv1) in self.key_options.iter_mut() {
+            for byte in priv0 {
+                *byte = u8::MIN;
+            }
+            for byte in priv1 {
+                *byte = u8::MIN;
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PublicKey {
     pub key_options: Vec<(Vec<u8>, Vec<u8>)>,
 }
@@ -44,6 +57,7 @@ impl PublicKey {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct KeyPair<T: Digest> {
     pub private: PrivateKey,
     pub public: PublicKey,
@@ -65,9 +79,10 @@ impl<T: Digest> KeyPair<T> {
     pub fn sign(self, msg: &[u8]) -> Signature<T> {
         let msg_hash = T::digest(msg).to_vec();
 
-        let mut sig = Vec::with_capacity(<T as Digest>::output_size() * 8); 
-        for (i, (priv0, priv1)) in self.private.key_options.into_iter().enumerate() {
-            
+        let mut sig = Vec::with_capacity(<T as Digest>::output_size() * 8);
+
+        for i in 0..(<T as Digest>::output_size() * 8) {
+            let (priv0, priv1) = self.private.key_options[i].clone();
             let msg_index = i / 8;
             let bit_index = 7 - (i % 8);
             
@@ -86,6 +101,7 @@ impl<T: Digest> KeyPair<T> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Signature<T: Digest> {
     pub pub_key: PublicKey,
     pub sig: Vec<Vec<u8>>,
@@ -120,15 +136,16 @@ impl<T:Digest> Signature<T> {
 #[cfg(test)]
 mod tests {
     use sha2::{Sha256, Sha512};
-    use super::{PrivateKey, PublicKey, KeyPair, Signature};
+    use super::KeyPair;
     
     #[test]
     fn keypair_length_and_contents_sha256() {
         let keypair = KeyPair::<Sha256>::generate();
         assert_eq!(keypair.private.key_options.len(), 256);
         assert_eq!(keypair.public.key_options.len(), 256);
-        
-        for (k0, k1) in keypair.private.key_options {
+
+        for i in 0..256 {
+            let (k0, k1) = &keypair.private.key_options[i];
             assert_eq!(k0.len(), 32);
             assert_eq!(k1.len(), 32);
         }
@@ -145,7 +162,8 @@ mod tests {
         assert_eq!(keypair.private.key_options.len(), 512);
         assert_eq!(keypair.public.key_options.len(), 512);
         
-        for (k0, k1) in keypair.private.key_options {
+        for i in 0..512 {
+            let (k0, k1) = &keypair.private.key_options[i];
             assert_eq!(k0.len(), 64);
             assert_eq!(k1.len(), 64);
         }
