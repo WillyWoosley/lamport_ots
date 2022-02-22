@@ -4,8 +4,10 @@ use digest::Digest;
 use rand::{thread_rng, Rng};
 
 use std::marker::PhantomData;
+use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct PrivateKey {
     pub key_options: Vec<(Vec<u8>, Vec<u8>)>,
 }
@@ -38,13 +40,14 @@ impl Drop for PrivateKey {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PublicKey {
+#[derive(Debug, Clone)]
+pub struct PublicKey<T> {
     pub key_options: Vec<(Vec<u8>, Vec<u8>)>,
+    hasher: PhantomData<T>,
 }
 
-impl PublicKey {
-    pub fn generate<T: Digest>(private: &PrivateKey) -> Self {
+impl<T: Digest> PublicKey<T> {
+    pub fn generate(private: &PrivateKey) -> Self {
         let mut key_options = Vec::with_capacity(<T as Digest>::output_size() * 8);
 
         for val in &private.key_options {
@@ -53,21 +56,53 @@ impl PublicKey {
             key_options.push((hash0, hash1));
        }
 
-        PublicKey {key_options}
+        PublicKey {
+            hasher: PhantomData,
+            key_options,
+        }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct KeyPair<T: Digest> {
+impl<T> PartialEq for PublicKey<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.key_options == other.key_options &&
+        self.hasher == other.hasher
+    }
+}
+
+impl<T> Eq for PublicKey<T> {}
+
+impl<T> PartialOrd for PublicKey<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for PublicKey<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key_options.cmp(&other.key_options)
+            .then(self.hasher.cmp(&other.hasher))
+    }
+}
+
+impl<T> Hash for PublicKey<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.key_options.hash(state);
+        self.hasher.hash(state);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct KeyPair<T> {
     pub private: PrivateKey,
-    pub public: PublicKey,
+    pub public: PublicKey<T>,
     hasher: PhantomData<T>, 
 }
 
 impl<T: Digest> KeyPair<T> {
     pub fn generate() -> Self {
         let private = PrivateKey::generate(<T as Digest>::output_size());
-        let public = PublicKey::generate::<T>(&private);
+        let public = PublicKey::<T>::generate(&private);
 
         KeyPair {
             hasher: PhantomData,
@@ -101,9 +136,41 @@ impl<T: Digest> KeyPair<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Signature<T: Digest> {
-    pub pub_key: PublicKey,
+impl<T> PartialEq for KeyPair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.private == other.private &&
+        self.public == other.public &&
+        self.hasher == other.hasher
+    }
+}
+
+impl<T> Eq for KeyPair<T> {}
+
+impl<T> PartialOrd for KeyPair<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for KeyPair<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.private.cmp(&other.private)
+            .then(self.public.cmp(&other.public))
+            .then(self.hasher.cmp(&other.hasher))
+    }
+}
+
+impl<T> Hash for KeyPair<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.private.hash(state);
+        self.public.hash(state);
+        self.hasher.hash(state);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Signature<T> {
+    pub pub_key: PublicKey<T>,
     pub sig: Vec<Vec<u8>>,
     hasher: PhantomData<T>,
 }
@@ -133,11 +200,46 @@ impl<T:Digest> Signature<T> {
     }
 }
 
+impl<T> PartialEq for Signature<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.pub_key == other.pub_key &&
+        self.sig == other.sig &&
+        self.hasher == other.hasher
+    }
+}
+
+impl<T> Eq for Signature<T> {}
+
+impl<T> PartialOrd for Signature<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for Signature<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.pub_key.cmp(&other.pub_key)
+            .then(self.sig.cmp(&other.sig))
+            .then(self.hasher.cmp(&other.hasher))
+    }
+}
+
+impl<T> Hash for Signature<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.pub_key.hash(state);
+        self.sig.hash(state);
+        self.hasher.hash(state);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use sha2::{Sha256, Sha512};
     use super::KeyPair;
-    
+   
+    use std::hash::{Hash, Hasher};
+    use std::collections::hash_map::DefaultHasher;
+
     #[test]
     fn keypair_length_and_contents_sha256() {
         let keypair = KeyPair::<Sha256>::generate();
@@ -221,6 +323,76 @@ mod tests {
         let signature = keypair.sign(b"Hello world!");
 
         assert!(!signature.verify(b"Hello moon!"));
+    }
+
+    #[test]
+    fn test_privkey_traits() {
+        let pair1 = KeyPair::<Sha256>::generate();
+        let pair2 = KeyPair::<Sha256>::generate();
+        
+        assert_ne!(pair1.private, pair2.private);
+        assert!(pair1.private > pair2.private || pair2.private > pair1.private);
+    
+        let mut hasher1 = DefaultHasher::new();
+        let mut hasher2 = DefaultHasher::new();
+        pair1.private.hash(&mut hasher1);
+        pair2.private.hash(&mut hasher2);
+        assert_ne!(hasher1.finish(), hasher2.finish());
+        
+        let _clone = pair1.private.clone();
+    }
+    
+    #[test]
+    fn test_pubkey_traits() {
+        let pair1 = KeyPair::<Sha256>::generate();
+        let pair2 = KeyPair::<Sha256>::generate();
+        
+        assert_ne!(pair1.public, pair2.public);
+        assert!(pair1.public > pair2.public || pair2.public > pair1.public);
+    
+        let mut hasher1 = DefaultHasher::new();
+        let mut hasher2 = DefaultHasher::new();
+        pair1.public.hash(&mut hasher1);
+        pair2.public.hash(&mut hasher2);
+        assert_ne!(hasher1.finish(), hasher2.finish());
+        
+        let _clone = pair1.public.clone();
+    }
+
+    #[test]
+    fn test_keypair_traits() {
+        let pair1 = KeyPair::<Sha256>::generate();
+        let pair2 = KeyPair::<Sha256>::generate();
+        
+        assert_ne!(pair1, pair2);
+        assert!(pair1 > pair2 || pair2 > pair1);
+    
+        let mut hasher1 = DefaultHasher::new();
+        let mut hasher2 = DefaultHasher::new();
+        pair1.hash(&mut hasher1);
+        pair2.hash(&mut hasher2);
+        assert_ne!(hasher1.finish(), hasher2.finish());
+        
+        let _clone = pair1.clone();
+    }
+
+    #[test]
+    fn test_sig_traits() {
+        let pair1 = KeyPair::<Sha256>::generate();
+        let pair2 = KeyPair::<Sha256>::generate();
+        let sig1 = pair1.sign(b"Hello world!");
+        let sig2 = pair2.sign(b"Hello world!");
+
+        assert_ne!(sig1, sig2);
+        assert!(sig1 > sig2 || sig2 > sig1);
+    
+        let mut hasher1 = DefaultHasher::new();
+        let mut hasher2 = DefaultHasher::new();
+        sig1.hash(&mut hasher1);
+        sig2.hash(&mut hasher2);
+        assert_ne!(hasher1.finish(), hasher2.finish());
+        
+        let _clone = sig1.clone();
     }
 }
 
