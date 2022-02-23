@@ -1,5 +1,5 @@
 [package]
-name = "lamport_sigs"
+name = "lamport_ots"
 version = "0.1.0"
 edition = "2021"
 
