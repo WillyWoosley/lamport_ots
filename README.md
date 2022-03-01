@@ -1,4 +1,4 @@
-# lamport_signatures
+# lamport_ots
 A Rust implementation of Leslie Lamport's [eponymous signature scheme](https://en.wikipedia.org/wiki/Lamport_signature), providing a method of digitally signing data through the use of crypotgraphic hashes. Notably, this scheme is believed to be secure even in the face of attack by quantum computers.
 
 ## Documentation:
