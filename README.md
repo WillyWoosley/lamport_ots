@@ -1,8 +1,13 @@
 # lamport_ots
+
+[![Crate](https://img.shields.io/crates/v/lamport_ots.svg)](https://crates.io/crates/lamport_ots)
+[![Documentation](https://docs.rs/lamport_ots/badge.svg)](https://docs.rs/lamport_ots)
+[![License](https://img.shields.io/github/license/WillyWoosley/lamport_ots)](https://github.com/WillyWoosley/lamport_ots/blob/main/LICENSE)
+
 A Rust implementation of Leslie Lamport's [eponymous signature scheme](https://en.wikipedia.org/wiki/Lamport_signature), providing a method of digitally signing data through the use of crypotgraphic hashes. Notably, this scheme is believed to be secure even in the face of attack by quantum computers.
 
 ## Documentation:
-TODO
+Full documentation for this crate can be found [here](https://docs.rs/lamport_ots).
 
 ## Usage:
 ### A Typical Example
@@ -46,11 +51,11 @@ assert!(signature.verify(&buffer));
 ```
 
 ## Dependencies:
-This crate makes use of the [rand](https://github.com/rust-random/rand) and RustCrypto [digest](https://github.com/RustCrypto/traits/tree/master/digest) crates. Further, it is intended for use with any of RustCrypto's numerous [hash functions](https://github.com/RustCrypto/hashes), or any other hashing algorithm which implements their `digest` trait.
+This crate makes use of the [`rand`](https://github.com/rust-random/rand) and RustCrypto [`digest`](https://github.com/RustCrypto/traits/tree/master/digest) crates. Further, it is intended for use with any of RustCrypto's numerous [hash functions](https://github.com/RustCrypto/hashes), or any other hashing algorithm which implements their `digest` trait.
 
 ## A Word of Caution:
 This crate has been in no way vetted for security by any competent authority, and thus is not intended for any serious use without prior inspection. Use at your own risk.
 
 ## License:
-This software distributed under the [MIT License](LICENSE)
+This software distributed under the [MIT License](LICENSE).
 

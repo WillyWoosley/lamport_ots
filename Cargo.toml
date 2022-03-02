@@ -4,9 +4,13 @@ version = "0.1.0"
 authors = ["Willy Woosley"]  
 edition = "2021"
 description = "A Rust implementation of Leslie Lamport's one-time signature scheme"
+documentation = "https://docs.rs/lamport_ots"
 readme = "README.md"
 repository = "https://github.com/WillyWoosley/lamport_ots"
 license = "MIT"
+keywords = ["lamport", "signature", "scheme", "one-time", "cryptography"]
+categories = ["cryptography"]
+exclude = ["/tests"]
 
 [dependencies]
 rand = "0.8"
