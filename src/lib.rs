@@ -312,8 +312,6 @@ impl<T> Hash for KeyPair<T> {
 /// assert_ne!(sig1.pub_key(), sig2.pub_key());
 /// assert_ne!(sig1.sig(), sig2.sig());
 /// ```
-
-
 #[derive(Debug, Clone)]
 pub struct Signature<T> {
     pub_key: PublicKey<T>,

@@ -6,6 +6,8 @@ use lamport_ots::KeyPair;
 
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
+use std::fs::File;
+use std::io::Read;
 
 #[test]
 fn different_generates_different_keypairs() {
@@ -41,7 +43,7 @@ fn signature_length_and_contents_sha512() {
 }
 
 #[test]
-fn correct_signature_verifies_correct_data() {
+fn correct_signature_verifies_correct_string() {
     let keypair = KeyPair::<Sha256>::generate();
     let signature = keypair.sign(b"Hello world!");
 
@@ -49,12 +51,38 @@ fn correct_signature_verifies_correct_data() {
 }
 
 #[test]
-fn correct_signature_fails_incorrect_data() {
+fn correct_signature_fails_incorrect_string() {
     let keypair = KeyPair::<Sha256>::generate();
     let signature = keypair.sign(b"Hello world!");
 
     assert!(!signature.verify(b"Hello moon!"));
 }
+
+#[test]
+fn correct_signatre_verifies_correct_read() {
+    let mut f = File::open("tests/data.txt").unwrap();
+    let mut buffer = Vec::new();
+    f.read_to_end(&mut buffer).unwrap();
+
+    let keypair = KeyPair::<Sha256>::generate();
+    let signature = keypair.sign(&buffer);
+
+    assert!(signature.verify(&buffer));
+}
+
+#[test]
+fn correct_signatre_fails_incorrect_read() {
+    let mut f = File::open("tests/data.txt").unwrap();
+    let mut buffer = Vec::new();
+    f.read_to_end(&mut buffer).unwrap();
+    
+    let keypair = KeyPair::<Sha256>::generate();
+    let signature = keypair.sign(&buffer);
+    
+    buffer.pop();
+    assert!(!signature.verify(&buffer));
+}
+
 
 #[test]
 fn test_privkey_traits() {
